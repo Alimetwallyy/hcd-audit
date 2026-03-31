@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>HCD Migration Audit</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://d1hilrkz3ka39e.cloudfront.net/unpkg/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1a1a2e;min-height:100vh;overflow-x:hidden}
+        .header{background:linear-gradient(135deg,#0f1b2d 0%,#1a237e 100%);color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+        .header h1{font-size:18px;font-weight:700}
+        .header-sub{font-size:11px;opacity:.7}
+        .back-btn{background:rgba(255,255,255,.15);border:none;color:#fff;padding:8px 14px;border-radius:8px;font-size:14px;cursor:pointer;display:none}
+        .back-btn:active{background:rgba(255,255,255,.3)}
+        .page{display:none;padding:20px;padding-bottom:100px}
+        .page.active{display:block}
+        .welcome-card{background:#fff;border-radius:16px;padding:30px 24px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.08);margin-bottom:24px}
+        .welcome-card h2{font-size:22px;margin-bottom:8px}
+        .welcome-card p{color:#666;font-size:14px}
+        .app-icon{font-size:48px;margin-bottom:12px}
+        .name-input-group{background:#fff;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+        .name-input-group label{font-size:13px;font-weight:600;color:#555;display:block;margin-bottom:8px}
+        .name-input-group input{width:100%;padding:14px 16px;border:2px solid #e0e0e0;border-radius:10px;font-size:16px;transition:border-color .2s}
+        .name-input-group input:focus{outline:none;border-color:#ff9800}
+        .menu-btn{display:flex;align-items:center;width:100%;padding:20px;margin-bottom:12px;border:none;border-radius:14px;font-size:17px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+        .menu-btn:active{transform:scale(.97)}
+        .menu-btn .btn-icon{font-size:28px;margin-right:16px}
+        .menu-btn .btn-text{text-align:left}
+        .menu-btn .btn-desc{font-size:12px;font-weight:400;opacity:.7;display:block;margin-top:2px}
+        .btn-ship{background:linear-gradient(135deg,#e3f2fd,#bbdefb);color:#0d47a1}
+        .btn-receive{background:linear-gradient(135deg,#e8f5e9,#c8e6c9);color:#1b5e20}
+        .btn-dashboard{background:linear-gradient(135deg,#fff3e0,#ffe0b2);color:#e65100}
+        .section-card{background:#fff;border-radius:14px;padding:20px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+        .section-card h3{font-size:15px;font-weight:700;margin-bottom:12px;color:#333}
+        .scan-btn{width:100%;padding:16px;border:2px dashed #ccc;border-radius:12px;background:#fafafa;font-size:16px;font-weight:600;color:#555;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+        .scan-btn:active{background:#f0f0f0;border-color:#ff9800}
+        .scan-btn.scanned{border-style:solid;border-color:#4caf50;background:#e8f5e9;color:#2e7d32}
+        .manual-entry{display:flex;gap:8px;margin-top:10px}
+        .manual-entry input{flex:1;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:14px}
+        .manual-entry input:focus{outline:none;border-color:#ff9800}
+        .manual-entry button{padding:12px 18px;background:#ff9800;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer}
+        .asin-list{list-style:none}
+        .asin-item{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#f8f9fa;border-radius:10px;margin-bottom:8px;font-size:14px;font-weight:500;border-left:4px solid #4caf50}
+        .asin-item.damaged{border-left-color:#f44336;background:#fff5f5}
+        .asin-item.missing{border-left-color:#ff9800;background:#fff8e1}
+        .asin-item.unexpected{border-left-color:#9c27b0;background:#f3e5f5}
+        .asin-item .asin-code{font-family:'Courier New',monospace;font-weight:700}
+        .damage-btn{background:#fff;border:1px solid #f44336;color:#f44336;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+        .damage-btn:active{background:#f44336;color:#fff}
+        .damage-btn.marked{background:#f44336;color:#fff}
+        .action-btn{width:100%;padding:18px;border:none;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;margin-top:12px;transition:transform .15s}
+        .action-btn:active{transform:scale(.97)}
+        .action-btn:disabled{opacity:.4;cursor:not-allowed}
+        .btn-primary{background:#ff9800;color:#fff}
+        .btn-success{background:#4caf50;color:#fff}
+        .btn-danger{background:#f44336;color:#fff}
+        .count-badge{display:inline-block;background:#ff9800;color:#fff;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:700;margin-left:8px}
+        .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.85);z-index:1000;justify-content:center;align-items:center;padding:20px}
+        .modal-overlay.active{display:flex}
+        .modal-content{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:400px;max-height:90vh;overflow-y:auto}
+        .modal-content h3{margin-bottom:16px;text-align:center}
+        .modal-close{width:100%;padding:14px;background:#eee;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-top:12px}
+        #scanner-container{width:100%;border-radius:10px;overflow:hidden}
+        .damage-form label{display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;margin-top:14px}
+        .damage-form select,.damage-form textarea{width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit}
+        .damage-form textarea{height:80px;resize:vertical}
+        .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+        .stat-card{background:#fff;border-radius:14px;padding:18px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+        .stat-number{font-size:32px;font-weight:800}
+        .stat-label{font-size:12px;color:#777;font-weight:600;margin-top:4px}
+        .stat-shipped .stat-number{color:#1565c0}
+        .stat-received .stat-number{color:#2e7d32}
+        .stat-transit .stat-number{color:#ff9800}
+        .stat-issues .stat-number{color:#f44336}
+        .issue-item{padding:14px;background:#fff5f5;border-radius:10px;margin-bottom:8px;border-left:4px solid #f44336;font-size:13px}
+        .issue-item.warning{background:#fff8e1;border-left-color:#ff9800}
+        .issue-item strong{display:block;margin-bottom:4px}
+        .export-btn{width:100%;padding:16px;background:#1a237e;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:16px}
+        .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(100px);background:#323232;color:#fff;padding:14px 24px;border-radius:10px;font-size:14px;font-weight:500;z-index:2000;transition:transform .3s ease;text-align:center;max-width:90%}
+        .toast.show{transform:translateX(-50%) translateY(0)}
+        .toast.success{background:#2e7d32}
+        .toast.error{background:#c62828}
+        .toast.warning{background:#e65100}
+        .loading{text-align:center;padding:40px;color:#999}
+        .spinner{width:36px;height:36px;border:3px solid #eee;border-top-color:#ff9800;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .empty-state{text-align:center;padding:40px 20px;color:#999}
+        .empty-state .empty-icon{font-size:48px;margin-bottom:12px}
+        .expected-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+        .progress-bar{width:100%;height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden;margin-bottom:16px}
+        .progress-fill{height:100%;background:linear-gradient(90deg,#4caf50,#66bb6a);border-radius:4px;transition:width .3s ease}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <button class="back-btn" id="backBtn" onclick="goHome()">← Back</button>
+        <div>
+            <h1 id="headerTitle">📦 HCD Migration Audit</h1>
+            <div class="header-sub" id="headerSub">HCD2 → HCD4 Transfer Tracking</div>
+        </div>
+        <div id="auditorBadge" style="font-size:12px;opacity:.7"></div>
+    </div>
+
+    <div id="page-home" class="page active">
+        <div class="welcome-card">
+            <div class="app-icon">📦</div>
+            <h2>HCD Migration Audit</h2>
+            <p>Track container transfers from HCD2 to HCD4</p>
+        </div>
+        <div class="name-input-group">
+            <label>👤 YOUR NAME (required)</label>
+            <input type="text" id="auditorName" placeholder="Enter your name..." autocomplete="name">
+        </div>
+        <button class="menu-btn btn-ship" onclick="goToPage('ship')">
+            <span class="btn-icon">🚚</span>
+            <span class="btn-text">Ship from HCD2<span class="btn-desc">Scan containers & ASINs for outbound</span></span>
+        </button>
+        <button class="menu-btn btn-receive" onclick="goToPage('receive')">
+            <span class="btn-icon">📥</span>
+            <span class="btn-text">Receive at HCD4<span class="btn-desc">Verify incoming containers & flag damage</span></span>
+        </button>
+        <button class="menu-btn btn-dashboard" onclick="goToPage('dashboard')">
+            <span class="btn-icon">📊</span>
+            <span class="btn-text">Live Dashboard<span class="btn-desc">Real-time status & discrepancies</span></span>
+        </button>
+    </div>
+
+    <div id="page-ship" class="page">
+        <div class="section-card">
+            <h3>📦 Step 1: Scan Container</h3>
+            <button class="scan-btn" id="shipContainerBtn" onclick="startScan('ship-container')">📷 Tap to Scan Container Barcode</button>
+            <div class="manual-entry">
+                <input type="text" id="shipContainerManual" placeholder="Or type container ID...">
+                <button onclick="manualEntry('ship-container')">Add</button>
+            </div>
+            <div id="shipContainerInfo" style="margin-top:12px"></div>
+        </div>
+        <div class="section-card" id="shipAsinSection" style="display:none">
+            <div class="expected-header">
+                <h3>📋 Step 2: Scan ASINs Inside</h3>
+                <span class="count-badge" id="shipAsinCount">0</span>
+            </div>
+            <button class="scan-btn" onclick="startScan('ship-asin')">📷 Tap to Scan ASIN Barcode</button>
+            <div class="manual-entry">
+                <input type="text" id="shipAsinManual" placeholder="Or type ASIN...">
+                <button onclick="manualEntry('ship-asin')">Add</button>
+            </div>
+            <ul class="asin-list" id="shipAsinList" style="margin-top:14px"></ul>
+        </div>
+        <button class="action-btn btn-success" id="shipConfirmBtn" style="display:none" onclick="confirmShipment()">✅ Seal & Confirm Shipment</button>
+    </div>
+
+    <div id="page-receive" class="page">
+        <div class="section-card">
+            <h3>📦 Step 1: Scan Incoming Container</h3>
+            <button class="scan-btn" id="recvContainerBtn" onclick="startScan('recv-container')">📷 Tap to Scan Container Barcode</button>
+            <div class="manual-entry">
+                <input type="text" id="recvContainerManual" placeholder="Or type container ID...">
+                <button onclick="manualEntry('recv-container')">Add</button>
+            </div>
+            <div id="recvContainerInfo" style="margin-top:12px"></div>
+        </div>
+        <div class="section-card" id="recvAsinSection" style="display:none">
+            <div class="expected-header">
+                <h3>📋 Step 2: Verify ASINs</h3>
+                <span class="count-badge" id="recvAsinCount">0 / 0</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" id="recvProgress" style="width:0%"></div></div>
+            <button class="scan-btn" onclick="startScan('recv-asin')">📷 Tap to Scan ASIN Barcode</button>
+            <div class="manual-entry">
+                <input type="text" id="recvAsinManual" placeholder="Or type ASIN...">
+                <button onclick="manualEntry('recv-asin')">Add</button>
+            </div>
+            <ul class="asin-list" id="recvAsinList" style="margin-top:14px"></ul>
+        </div>
+        <button class="action-btn btn-success" id="recvConfirmBtn" style="display:none" onclick="confirmReceive()">✅ Confirm Container Received</button>
+    </div>
+
+    <div id="page-dashboard" class="page">
+        <div class="stats-grid">
+            <div class="stat-card stat-shipped"><div class="stat-number" id="statShipped">-</div><div class="stat-label">📤 SHIPPED</div></div>
+            <div class="stat-card stat-received"><div class="stat-number" id="statReceived">-</div><div class="stat-label">📥 RECEIVED</div></div>
+            <div class="stat-card stat-transit"><div class="stat-number" id="statTransit">-</div><div class="stat-label">🚚 IN TRANSIT</div></div>
+            <div class="stat-card stat-issues"><div class="stat-number" id="statIssues">-</div><div class="stat-label">⚠️ ISSUES</div></div>
+        </div>
+        <div class="section-card">
+            <h3>⚠️ Discrepancies</h3>
+            <div id="discrepancyList"><div class="empty-state"><div class="empty-icon">✅</div><p>No discrepancies found</p></div></div>
+        </div>
+        <div class="section-card">
+            <h3>🔴 Damaged Items</h3>
+            <div id="damagedList"><div class="empty-state"><div class="empty-icon">✅</div><p>No damaged items reported</p></div></div>
+        </div>
+        <div class="section-card">
+            <h3>📦 All Containers</h3>
+            <div id="allContainersList"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+        </div>
+        <button class="export-btn" onclick="exportCSV()">📥 Export Full Report (CSV)</button>
+    </div>
+
+    <div class="modal-overlay" id="scannerModal">
+        <div class="modal-content">
+            <h3 id="scannerTitle">📷 Scanning...</h3>
+            <div id="scanner-container"></div>
+            <button class="modal-close" onclick="closeScanner()">✕ Cancel</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="damageModal">
+        <div class="modal-content">
+            <h3>🔴 Report Damage</h3>
+            <p id="damageAsinLabel" style="font-family:monospace;font-weight:700;text-align:center;margin-bottom:10px"></p>
+            <div class="damage-form">
+                <label>Damage Type</label>
+                <select id="damageType">
+                    <option value="Dented">Dented</option>
+                    <option value="Torn packaging">Torn packaging</option>
+                    <option value="Cracked/Broken">Cracked / Broken</option>
+                    <option value="Water damage">Water damage</option>
+                    <option value="Missing parts">Missing parts</option>
+                    <option value="Other">Other</option>
+                </select>
+                <label>Notes (optional)</label>
+                <textarea id="damageNotes" placeholder="Describe the damage..."></textarea>
+            </div>
+            <button class="action-btn btn-danger" onclick="confirmDamage()" style="margin-top:16px">🔴 Confirm Damage</button>
+            <button class="modal-close" onclick="closeDamageModal()">Cancel</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+    firebase.initializeApp({
+        apiKey:"AIzaSyDjMfnd2fcjTVcsKKnoE13iFqqJ7WEG3w8",
+        authDomain:"hcd2-to-hcd4-transfers.firebaseapp.com",
+        projectId:"hcd2-to-hcd4-transfers",
+        storageBucket:"hcd2-to-hcd4-transfers.firebasestorage.app",
+        messagingSenderId:"366006336327",
+        appId:"1:366006336327:web:e031823ced9f18855eaa62"
+    });
+    const db=firebase.firestore();
+
+    let currentPage='home',scannerInstance=null,scanCallback=null;
+    let shipContainerId=null,shipAsins=[];
+    let recvContainerId=null,recvExpectedAsins=[],recvScannedAsins=[],recvContainerDocId=null;
+    let damageTargetAsin=null,dashboardUnsubscribe=null;
+
+    document.addEventListener('DOMContentLoaded',()=>{
+        const saved=localStorage.getItem('auditorName');
+        if(saved)document.getElementById('auditorName').value=saved;
+        document.getElementById('auditorName').addEventListener('input',e=>{
+            localStorage.setItem('auditorName',e.target.value.trim());
+        });
+    });
+
+    function getAuditorName(){
+        const name=document.getElementById('auditorName').value.trim();
+        if(!name){showToast('Please enter your name first!','error');goHome();document.getElementById('auditorName').focus();return null;}
+        return name;
+    }
+
+    function goToPage(page){
+        if(page!=='dashboard'&&!getAuditorName())return;
+        document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+        document.getElementById('page-'+page).classList.add('active');
+        document.getElementById('backBtn').style.display='block';
+        currentPage=page;
+        const titles={ship:'🚚 Ship from HCD2',receive:'📥 Receive at HCD4',dashboard:'📊 Live Dashboard'};
+        document.getElementById('headerTitle').textContent=titles[page];
+        document.getElementById('headerSub').textContent='';
+        document.getElementById('auditorBadge').textContent=getAuditorName()||'';
+        if(page==='ship')resetShipState();
+        if(page==='receive')resetRecvState();
+        if(page==='dashboard')loadDashboard();
+    }
+
+    function goHome(){
+        document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+        document.getElementById('page-home').classList.add('active');
+        document.getElementById('backBtn').style.display='none';
+        document.getElementById('headerTitle').textContent='📦 HCD Migration Audit';
+        document.getElementById('headerSub').textContent='HCD2 → HCD4 Transfer Tracking';
+        document.getElementById('auditorBadge').textContent='';
+        currentPage='home';
+    }
+
+    function startScan(mode){
+        const titles={'ship-container':'Scan Container Barcode','ship-asin':'Scan ASIN Barcode','recv-container':'Scan Container Barcode','recv-asin':'Scan ASIN Barcode'};
+        document.getElementById('scannerTitle').textContent='📷 '+titles[mode];
+        document.getElementById('scannerModal').classList.add('active');
+        scanCallback=(code)=>handleScanResult(mode,code);
+        scannerInstance=new Html5Qrcode("scanner-container");
+        scannerInstance.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:150}},(decodedText)=>{
+            beep();closeScanner();scanCallback(decodedText);
+        },()=>{}).catch(err=>{
+            console.error('Scanner error:',err);closeScanner();showToast('Camera access denied. Use manual entry.','error');
+        });
+    }
+
+    function closeScanner(){
+        document.getElementById('scannerModal').classList.remove('active');
+        if(scannerInstance){scannerInstance.stop().catch(()=>{});scannerInstance.clear().catch(()=>{});scannerInstance=null;}
+    }
+
+    function manualEntry(mode){
+        const inputIds={'ship-container':'shipContainerManual','ship-asin':'shipAsinManual','recv-container':'recvContainerManual','recv-asin':'recvAsinManual'};
+        const input=document.getElementById(inputIds[mode]);
+        const value=input.value.trim();
+        if(!value){showToast('Please enter a value','warning');return;}
+        input.value='';beep();handleScanResult(mode,value);
+    }
+
+    function handleScanResult(mode,code){
+        switch(mode){
+            case'ship-container':setShipContainer(code);break;
+            case'ship-asin':addShipAsin(code);break;
+            case'recv-container':setRecvContainer(code);break;
+            case'recv-asin':addRecvAsin(code);break;
+        }
+    }
+
+    function resetShipState(){
+        shipContainerId=null;shipAsins=[];
+        document.getElementById('shipContainerBtn').className='scan-btn';
+        document.getElementById('shipContainerBtn').innerHTML='📷 Tap to Scan Container Barcode';
+        document.getElementById('shipContainerInfo').innerHTML='';
+        document.getElementById('shipAsinSection').style.display='none';
+        document.getElementById('shipAsinList').innerHTML='';
+        document.getElementById('shipAsinCount').textContent='0';
+        document.getElementById('shipConfirmBtn').style.display='none';
+    }
+
+    function setShipContainer(containerId){
+        shipContainerId=containerId.toUpperCase();
+        db.collection('containers').where('containerId','==',shipContainerId).get().then(snapshot=>{
+            if(!snapshot.empty){showToast('⚠️ Container '+shipContainerId+' was already shipped!','warning');return;}
+            document.getElementById('shipContainerBtn').className='scan-btn scanned';
+            document.getElementById('shipContainerBtn').innerHTML='✅ '+shipContainerId;
+            document.getElementById('shipAsinSection').style.display='block';
+            document.getElementById('shipConfirmBtn').style.display='block';
+            showToast('Container '+shipContainerId+' ready','success');
+        });
+    }
+
+    function addShipAsin(asin){
+        const a=asin.toUpperCase();
+        if(shipAsins.includes(a)){showToast('ASIN '+a+' already scanned!','warning');return;}
+        shipAsins.push(a);renderShipAsins();showToast('Added '+a,'success');
+    }
+
+    function removeShipAsin(asin){shipAsins=shipAsins.filter(a=>a!==asin);renderShipAsins();}
+
+    function renderShipAsins(){
+        const list=document.getElementById('shipAsinList');
+        document.getElementById('shipAsinCount').textContent=shipAsins.length;
+        if(shipAsins.length===0){list.innerHTML='<div class="empty-state"><p>No ASINs scanned yet</p></div>';return;}
+        list.innerHTML=shipAsins.map((asin,i)=>'<li class="asin-item"><span><span class="asin-code">'+asin+'</span><span style="display:block;color:#666;font-size:11px">#'+(i+1)+'</span></span><button class="damage-btn" onclick="removeShipAsin(\''+asin+'\')" style="border-color:#999;color:#999">✕ Remove</button></li>').join('');
+    }
+
+    async function confirmShipment(){
+        const auditor=getAuditorName();
+        if(!auditor)return;
+        if(!shipContainerId){showToast('Scan a container first!','error');return;}
+        if(shipAsins.length===0){showToast('Scan at least one ASIN!','error');return;}
+        const btn=document.getElementById('shipConfirmBtn');
+        btn.disabled=true;btn.textContent='⏳ Saving...';
+        try{
+            const now=firebase.firestore.FieldValue.serverTimestamp();
+            await db.collection('containers').add({containerId:shipContainerId,status:'shipped',shippedBy:auditor,shippedAt:now,receivedBy:null,receivedAt:null,expectedAsinCount:shipAsins.length,receivedAsinCount:0,warehouse_origin:'HCD2',warehouse_destination:'HCD4'});
+            const batch=db.batch();
+            shipAsins.forEach(asin=>{const ref=db.collection('scans').doc();batch.set(ref,{containerId:shipContainerId,asin:asin,scanType:'outbound',warehouse:'HCD2',auditor:auditor,timestamp:now,isDamaged:false,damageType:'',damageNotes:''});});
+            await batch.commit();
+            showToast('✅ Container '+shipContainerId+' shipped with '+shipAsins.length+' ASINs!','success');
+            resetShipState();
+        }catch(error){
+            console.error('Ship error:',error);showToast('Error saving! Check connection.','error');
+            btn.disabled=false;btn.textContent='✅ Seal & Confirm Shipment';
+        }
+    }
+
+    function resetRecvState(){
+        recvContainerId=null;recvExpectedAsins=[];recvScannedAsins=[];recvContainerDocId=null;
+        document.getElementById('recvContainerBtn').className='scan-btn';
+        document.getElementById('recvContainerBtn').innerHTML='📷 Tap to Scan Container Barcode';
+        document.getElementById('recvContainerInfo').innerHTML='';
+        document.getElementById('recvAsinSection').style.display='none';
+        document.getElementById('recvAsinList').innerHTML='';
+        document.getElementById('recvAsinCount').textContent='0 / 0';
+        document.getElementById('recvProgress').style.width='0%';
+        document.getElementById('recvConfirmBtn').style.display='none';
+    }
+
+    async function setRecvContainer(containerId){
+        recvContainerId=containerId.toUpperCase();
+        document.getElementById('recvContainerInfo').innerHTML='<div class="loading"><div class="spinner"></div>Looking up container...</div>';
+        try{
+            const containerSnap=await db.collection('containers').where('containerId','==',recvContainerId).get();
+            if(containerSnap.empty){
+                document.getElementById('recvContainerInfo').innerHTML='<div class="issue-item">⚠️ Container <strong>'+recvContainerId+'</strong> was NOT found in shipping records!</div>';
+                showToast('Container not found in records!','warning');return;
+            }
+            const containerDoc=containerSnap.docs[0];const containerData=containerDoc.data();recvContainerDocId=containerDoc.id;
+            if(containerData.status==='received'){
+                document.getElementById('recvContainerInfo').innerHTML='<div class="issue-item warning">⚠️ Container <strong>'+recvContainerId+'</strong> was already received by '+containerData.receivedBy+'!</div>';
+                showToast('Already received!','warning');return;
+            }
+            const scansSnap=await db.collection('scans').where('containerId','==',recvContainerId).where('scanType','==','outbound').get();
+            recvExpectedAsins=scansSnap.docs.map(d=>d.data().asin);recvScannedAsins=[];
+            document.getElementById('recvContainerBtn').className='scan-btn scanned';
+            document.getElementById('recvContainerBtn').innerHTML='✅ '+recvContainerId;
+            document.getElementById('recvContainerInfo').innerHTML='<p style="color:#2e7d32;font-weight:600;margin-top:8px">✅ Found! Shipped by '+containerData.shippedBy+' — '+recvExpectedAsins.length+' ASINs expected</p>';
+            document.getElementById('recvAsinSection').style.display='block';
+            document.getElementById('recvConfirmBtn').style.display='block';
+            renderRecvAsins();showToast('Container found! Scan ASINs to verify.','success');
+        }catch(error){
+            console.error('Receive lookup error:',error);
+            document.getElementById('recvContainerInfo').innerHTML='<div class="issue-item">❌ Error looking up container. Check connection.</div>';
+        }
+    }
+
+    function addRecvAsin(asin){
+        const a=asin.toUpperCase();
+        if(recvScannedAsins.find(x=>x.asin===a)){showToast('ASIN '+a+' already scanned!','warning');return;}
+        const isExpected=recvExpectedAsins.includes(a);
+        recvScannedAsins.push({asin:a,isDamaged:false,damageType:'',damageNotes:'',isExpected:isExpected});
+        if(!isExpected){showToast('⚠️ '+a+' was NOT expected in this container!','warning');}
+        else{showToast('✅ '+a+' verified','success');}
+        renderRecvAsins();
+    }
+
+    function renderRecvAsins(){
+        const list=document.getElementById('recvAsinList');
+        const scannedCodes=recvScannedAsins.map(a=>a.asin);
+        const totalExpected=recvExpectedAsins.length;
+        const scannedCount=recvScannedAsins.filter(a=>a.isExpected).length;
+        document.getElementById('recvAsinCount').textContent=scannedCount+' / '+totalExpected;
+        document.getElementById('recvProgress').style.width=(totalExpected>0?(scannedCount/totalExpected*100):0)+'%';
+        let html='';
+        recvScannedAsins.forEach(item=>{
+            const statusClass=item.isDamaged?'damaged':(item.isExpected?'':'unexpected');
+            const statusLabel=item.isDamaged?'⚠️ DAMAGED':(item.isExpected?'✅ Verified':'🟣 Unexpected');
+            const damageBtn=item.isDamaged?'<button class="damage-btn marked">🔴 '+item.damageType+'</button>':'<button class="damage-btn" onclick="openDamageModal(\''+item.asin+'\')">Mark Damaged</button>';
+            html+='<li class="asin-item '+statusClass+'"><span><span class="asin-code">'+item.asin+'</span><span style="display:block;font-size:11px">'+statusLabel+'</span></span>'+damageBtn+'</li>';
+        });
+        recvExpectedAsins.forEach(asin=>{
+            if(!scannedCodes.includes(asin)){
+                html+='<li class="asin-item missing"><span><span class="asin-code">'+asin+'</span><span style="display:block;font-size:11px">❌ Not yet scanned</span></span></li>';
+            }
+        });
+        list.innerHTML=html||'<div class="empty-state"><p>Scan ASINs to verify</p></div>';
+    }
+
+    function openDamageModal(asin){
+        damageTargetAsin=asin;
+        document.getElementById('damageAsinLabel').textContent=asin;
+        document.getElementById('damageType').value='Dented';
+        document.getElementById('damageNotes').value='';
+        document.getElementById('damageModal').classList.add('active');
+    }
+
+    function closeDamageModal(){document.getElementById('damageModal').classList.remove('active');damageTargetAsin=null;}
+
+    function confirmDamage(){
+        if(!damageTargetAsin)return;
+        const type=document.getElementById('damageType').value;
+        const notes=document.getElementById('damageNotes').value.trim();
+        const item=recvScannedAsins.find(a=>a.asin===damageTargetAsin);
+        if(item){item.isDamaged=true;item.damageType=type;item.damageNotes=notes;}
+        closeDamageModal();renderRecvAsins();showToast('🔴 '+damageTargetAsin+' marked as damaged','error');
+    }
+
+    async function confirmReceive(){
+        const auditor=getAuditorName();
+        if(!auditor)return;
+        if(!recvContainerId){showToast('Scan a container first!','error');return;}
+        const btn=document.getElementById('recvConfirmBtn');
+        btn.disabled=true;btn.textContent='⏳ Saving...';
+        try{
+            const now=firebase.firestore.FieldValue.serverTimestamp();
+            const scannedCodes=recvScannedAsins.map(a=>a.asin);
+            const missingAsins=recvExpectedAsins.filter(a=>!scannedCodes.includes(a));
+            const hasDiscrepancy=missingAsins.length>0;
+            await db.collection('containers').doc(recvContainerDocId).update({status:hasDiscrepancy?'discrepancy':'received',receivedBy:auditor,receivedAt:now,receivedAsinCount:recvScannedAsins.filter(a=>a.isExpected).length,missingAsins:missingAsins,hasDiscrepancy:hasDiscrepancy});
+            const batch=db.batch();
+            recvScannedAsins.forEach(item=>{
+                const ref=db.collection('scans').doc();
+                batch.set(ref,{containerId:recvContainerId,asin:item.asin,scanType:'inbound',warehouse:'HCD4',auditor:auditor,timestamp:now,isDamaged:item.isDamaged,damageType:item.damageType,damageNotes:item.damageNotes,isExpected:item.isExpected});
+            });
+            await batch.commit();
+            const msg=hasDiscrepancy?'⚠️ Container received with '+missingAsins.length+' missing ASIN(s)!':'✅ Container '+recvContainerId+' fully verified!';
+            showToast(msg,hasDiscrepancy?'warning':'success');resetRecvState();
+        }catch(error){
+            console.error('Receive error:',error);showToast('Error saving! Check connection.','error');
+            btn.disabled=false;btn.textContent='✅ Confirm Container Received';
+        }
+    }
+
+    function loadDashboard(){
+        if(dashboardUnsubscribe)dashboardUnsubscribe();
+        dashboardUnsubscribe=db.collection('containers').onSnapshot(async(snapshot)=>{
+            const containers=snapshot.docs.map(d=>({id:d.id,...d.data()}));
+            const shipped=containers.length;
+            const received=containers.filter(c=>c.status==='received').length;
+            const discrepancies=containers.filter(c=>c.status==='discrepancy').length;
+            const inTransit=containers.filter(c=>c.status==='shipped').length;
+            document.getElementById('statShipped').textContent=shipped;
+            document.getElementById('statReceived').textContent=received;
+            document.getElementById('statTransit').textContent=inTransit;
+            document.getElementById('statIssues').textContent=discrepancies;
+            const discContainers=containers.filter(c=>c.status==='discrepancy');
+            const discList=document.getElementById('discrepancyList');
+            if(discContainers.length===0){discList.innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><p>No discrepancies found</p></div>';}
+            else{discList.innerHTML=discContainers.map(c=>'<div class="issue-item"><strong>📦 '+c.containerId+'</strong>Shipped by '+c.shippedBy+' → Received by '+c.receivedBy+'<br>Missing ASINs: <strong>'+(c.missingAsins||[]).join(', ')+'</strong></div>').join('');}
+            const damagedSnap=await db.collection('scans').where('isDamaged','==',true).get();
+            const damagedItems=damagedSnap.docs.map(d=>d.data());
+            const dmgList=document.getElementById('damagedList');
+            if(damagedItems.length===0){dmgList.innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><p>No damaged items reported</p></div>';}
+            else{dmgList.innerHTML=damagedItems.map(d=>'<div class="issue-item"><strong>🔴 '+d.asin+'</strong>Container: '+d.containerId+' | Type: '+d.damageType+'<br>'+(d.damageNotes?'Notes: '+d.damageNotes:'')+'<span style="display:block;font-size:11px;color:#999;margin-top:4px">Reported by '+d.auditor+'</span></div>').join('');}
+            const allList=document.getElementById('allContainersList');
+            if(containers.length===0){allList.innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><p>No containers shipped yet</p></div>';}
+            else{allList.innerHTML=containers.map(c=>{
+                const se=c.status==='received'?'✅':c.status==='discrepancy'?'⚠️':'🚚';
+                const sc=c.status==='received'?'#2e7d32':c.status==='discrepancy'?'#e65100':'#1565c0';
+                return'<div style="padding:12px;background:#f8f9fa;border-radius:10px;margin-bottom:8px;border-left:4px solid '+sc+'"><strong>'+se+' '+c.containerId+'</strong><span style="float:right;font-size:12px;color:'+sc+';font-weight:600">'+c.status.toUpperCase()+'</span><div style="font-size:12px;color:#666;margin-top:4px">'+c.expectedAsinCount+' ASINs | Shipped by '+c.shippedBy+(c.receivedBy?' → Received by '+c.receivedBy:'')+'</div></div>';
+            }).join('');}
+        },error=>{console.error('Dashboard error:',error);});
+    }
+
+    async function exportCSV(){
+        showToast('Generating report...','success');
+        try{
+            const cs=await db.collection('containers').get();
+            const ss=await db.collection('scans').get();
+            const containers=cs.docs.map(d=>d.data());
+            const scans=ss.docs.map(d=>d.data());
+            let csv='CONTAINER REPORT\nContainer ID,Status,Shipped By,Expected ASINs,Received ASINs,Missing ASINs,Received By\n';
+            containers.forEach(c=>{csv+=c.containerId+','+c.status+','+c.shippedBy+','+c.expectedAsinCount+','+(c.receivedAsinCount||0)+',"'+(c.missingAsins||[]).join('; ')+'",'+(c.receivedBy||'N/A')+'\n';});
+            csv+='\nASIN SCAN DETAILS\nContainer ID,ASIN,Scan Type,Warehouse,Auditor,Damaged,Damage Type,Damage Notes\n';
+            scans.forEach(s=>{csv+=s.containerId+','+s.asin+','+s.scanType+','+s.warehouse+','+s.auditor+','+s.isDamaged+','+(s.damageType||'')+',"'+(s.damageNotes||'')+'"\n';});
+            const blob=new Blob([csv],{type:'text/csv'});
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement('a');a.href=url;a.download='HCD_Migration_Audit_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+            URL.revokeObjectURL(url);showToast('✅ Report downloaded!','success');
+        }catch(error){console.error('Export error:',error);showToast('Error exporting. Try again.','error');}
+    }
+
+    function beep(){
+        try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const osc=ctx.createOscillator();const gain=ctx.createGain();osc.type='sine';osc.frequency.value=800;gain.gain.value=0.3;osc.connect(gain);gain.connect(ctx.destination);osc.start();setTimeout(()=>{osc.stop();ctx.close();},150);}catch(e){}
+        if(navigator.vibrate)navigator.vibrate(100);
+    }
+
+    function showToast(message,type=''){
+        const toast=document.getElementById('toast');
+        toast.textContent=message;toast.className='toast '+type+' show';
+        setTimeout(()=>{toast.className='toast';},3000);
+    }
+    </script>
+</body>
+</html>
